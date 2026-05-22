@@ -1,0 +1,314 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Multi-company foundation ───────────────────────────────────────────────
+
+model Organisation {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users               User[]
+  purchaseOrders      PurchaseOrder[]
+  executionRecords    ExecutionRecord[]
+  financeRecords      FinanceRecord[]
+  forwardingRecords   ForwardingRecord[]
+  highSeasRecords     HighSeasRecord[]
+  clearanceRecords    ClearanceRecord[]
+  deliveryRecords     DeliveryRecord[]
+  auditLogs           AuditLog[]
+}
+
+model User {
+  id             String   @id @default(cuid())
+  orgId          String
+  name           String
+  email          String
+  phone          String?
+  role           Role     @default(VIEWER)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  org       Organisation @relation(fields: [orgId], references: [id])
+  auditLogs AuditLog[]
+
+  @@unique([orgId, email])
+}
+
+enum Role {
+  SUPER_ADMIN
+  ORG_ADMIN
+  PROCUREMENT
+  FINANCE
+  LOGISTICS
+  VIEWER
+}
+
+// ─── PO Master — the single source of truth ─────────────────────────────────
+
+model PurchaseOrder {
+  id            String      @id @default(cuid())
+  orgId         String
+  poRef         String      // FILE / PO REF NO. — the linking key across all stages
+  supplier      String
+  countryOfOrigin String?
+  description   String
+  category      Category
+  quantity      Decimal     @db.Decimal(15, 3)
+  unit          String?
+  currency      Currency
+  poValue       Decimal     @db.Decimal(15, 2)
+  pfiNo         String?
+  paymentTerms  String?
+  poDate        DateTime?
+  expectedEtd   DateTime?
+  remarks       String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  org               Organisation      @relation(fields: [orgId], references: [id])
+  executionRecord   ExecutionRecord?
+  financeRecord     FinanceRecord?
+  forwardingRecord  ForwardingRecord?
+  highSeasRecord    HighSeasRecord?
+  clearanceRecord   ClearanceRecord?
+  deliveryRecord    DeliveryRecord?
+
+  @@unique([orgId, poRef])
+  @@index([orgId])
+}
+
+enum Category {
+  CONSUMABLES
+  SPARES
+  EQUIPMENT
+  RAW_MATERIALS
+  OTHER
+}
+
+enum Currency {
+  USD
+  EUR
+  GBP
+  KES
+  CNY
+  AED
+  INR
+}
+
+// ─── Stage 1: Procurement — Under Execution ─────────────────────────────────
+
+model ExecutionRecord {
+  id               String          @id @default(cuid())
+  orgId            String
+  poId             String          @unique
+  quantity         Decimal?        @db.Decimal(15, 3)
+  productionStatus ProductionStatus @default(PENDING)
+  inspectionReq    Boolean         @default(false)
+  inspectionDate   DateTime?
+  confirmedEtd     DateTime?
+  destinationPort  String?
+  remarks          String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  org Organisation   @relation(fields: [orgId], references: [id])
+  po  PurchaseOrder  @relation(fields: [poId], references: [id])
+
+  @@index([orgId])
+}
+
+enum ProductionStatus {
+  PENDING
+  IN_PRODUCTION
+  READY_FOR_SHIPMENT
+  DELAYED
+  CANCELLED
+}
+
+// ─── Stage 2: Finance & Payments ────────────────────────────────────────────
+
+model FinanceRecord {
+  id              String        @id @default(cuid())
+  orgId           String
+  poId            String        @unique
+  quantity        Decimal?      @db.Decimal(15, 3)
+  depositAmount   Decimal?      @db.Decimal(15, 2)
+  depositDate     DateTime?
+  balanceDue      Decimal?      @db.Decimal(15, 2)
+  balancePaid     Decimal?      @db.Decimal(15, 2)
+  balancePaidDate DateTime?
+  paymentStatus   PaymentStatus @default(UNPAID)
+  bankCharges     Decimal?      @db.Decimal(15, 2)
+  freightCostUsd  Decimal?      @db.Decimal(15, 2)
+  insuranceUsd    Decimal?      @db.Decimal(15, 2)
+  customsTaxesUsd Decimal?      @db.Decimal(15, 2)
+  clearingFeesUsd Decimal?      @db.Decimal(15, 2)
+  totalLandedCost Decimal?      @db.Decimal(15, 2)
+  remarks         String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  org Organisation  @relation(fields: [orgId], references: [id])
+  po  PurchaseOrder @relation(fields: [poId], references: [id])
+
+  @@index([orgId])
+}
+
+enum PaymentStatus {
+  UNPAID
+  DEPOSIT_PAID
+  PARTIALLY_PAID
+  FULLY_PAID
+  OVERDUE
+}
+
+// ─── Stage 3: Forwarding ────────────────────────────────────────────────────
+
+model ForwardingRecord {
+  id               String    @id @default(cuid())
+  orgId            String
+  poId             String    @unique
+  quantity         Decimal?  @db.Decimal(15, 3)
+  forwardingAgent  String?
+  incoterms        String?
+  modeOfTransport  String?
+  portOfOrigin     String?
+  departureDate    DateTime?
+  vesselFlightNo   String?
+  deliveryPoint    String?
+  remarks          String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  org Organisation  @relation(fields: [orgId], references: [id])
+  po  PurchaseOrder @relation(fields: [poId], references: [id])
+
+  @@index([orgId])
+}
+
+// ─── Stage 4: High Seas ─────────────────────────────────────────────────────
+
+model HighSeasRecord {
+  id               String    @id @default(cuid())
+  orgId            String
+  poId             String    @unique
+  quantity         Decimal?  @db.Decimal(15, 3)
+  blNumber         String?
+  forwardingAgent  String?
+  vesselName       String?
+  portOfLoading    String?
+  portOfDischarge  String?
+  atd              DateTime?
+  eta              DateTime?
+  remarks          String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  org Organisation  @relation(fields: [orgId], references: [id])
+  po  PurchaseOrder @relation(fields: [poId], references: [id])
+
+  @@index([orgId])
+}
+
+// ─── Stage 5: Under Clearance ───────────────────────────────────────────────
+
+model ClearanceRecord {
+  id              String          @id @default(cuid())
+  orgId           String
+  poId            String          @unique
+  quantity        Decimal?        @db.Decimal(15, 3)
+  blNumber        String?
+  shipmentType    ShipmentType?
+  clearingAgent   String?
+  arrivalDate     DateTime?
+  docsReceived    Boolean         @default(false)
+  entryFiled      Boolean         @default(false)
+  dutiesPaid      Boolean         @default(false)
+  releaseStatus   ReleaseStatus   @default(PENDING)
+  clearanceStatus ClearanceStatus @default(IN_PROGRESS)
+  remarks         String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  org Organisation  @relation(fields: [orgId], references: [id])
+  po  PurchaseOrder @relation(fields: [poId], references: [id])
+
+  @@index([orgId])
+}
+
+enum ShipmentType {
+  FCL
+  LCL
+  AIR
+  ROAD
+}
+
+enum ReleaseStatus {
+  PENDING
+  RELEASED
+  ON_HOLD
+  DETAINED
+}
+
+enum ClearanceStatus {
+  IN_PROGRESS
+  CLEARED
+  QUERY_RAISED
+  DELAYED
+}
+
+// ─── Stage 6: Delivered ─────────────────────────────────────────────────────
+
+model DeliveryRecord {
+  id             String    @id @default(cuid())
+  orgId          String
+  poId           String    @unique
+  quantity       Decimal?  @db.Decimal(15, 3)
+  invoiceNo      String?
+  blNumber       String?
+  clearingAgent  String?
+  taxesPaidUsd   Decimal?  @db.Decimal(15, 2)
+  totalLandedCost Decimal? @db.Decimal(15, 2)
+  arrivalDate    DateTime?
+  deliveryPoint  String?
+  releaseDate    DateTime?
+  grnReceiptNo   String?
+  remarks        String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  org Organisation  @relation(fields: [orgId], references: [id])
+  po  PurchaseOrder @relation(fields: [poId], references: [id])
+
+  @@index([orgId])
+}
+
+// ─── Audit log — append-only ────────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  orgId      String
+  userId     String?
+  userRole   Role?
+  action     String   // CREATE | UPDATE | DELETE | LOGIN | EXPORT
+  entity     String   // PurchaseOrder | FinanceRecord | etc.
+  entityId   String?
+  changes    Json?    // { field: [oldVal, newVal] }
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  org  Organisation @relation(fields: [orgId], references: [id])
+  user User?        @relation(fields: [userId], references: [id])
+
+  @@index([orgId])
+  @@index([entity, entityId])
+}
