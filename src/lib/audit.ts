@@ -22,7 +22,7 @@ export async function auditLog(params: LogParams) {
         action:   params.action,
         entity:   params.entity,
         entityId: params.entityId,
-        changes:  params.changes ?? undefined,
+        changes:  params.changes ? (params.changes as any) : undefined,
         ip:       params.ip,
       },
     })
