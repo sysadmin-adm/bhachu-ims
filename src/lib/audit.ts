@@ -8,7 +8,7 @@ interface LogParams {
   action: 'CREATE' | 'UPDATE' | 'DELETE' | 'EXPORT' | 'IMPORT'
   entity: string
   entityId?: string
-  changes?: Record<string, [unknown, unknown]>
+  changes?: Record<string, unknown>
   ip?: string
 }
 
