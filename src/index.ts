@@ -25,7 +25,10 @@ const PORT = process.env.PORT ?? 3000
 // ─── Security middleware ─────────────────────────────────────────────────────
 app.use(helmet())
 app.use(cors({
-  origin:      process.env.FRONTEND_URL ?? 'http://localhost:5173',
+  origin: [
+    'http://localhost:5173',
+    'https://bhachu-ims-frontend.onrender.com',
+  ],
   credentials: true,
 }))
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 500, standardHeaders: true }))
